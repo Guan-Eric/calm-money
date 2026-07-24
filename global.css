@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+@import 'uniwind';
+
+/* Wealthsimple-inspired: warm paper neutrals, olive primary, editorial calm */
+@theme {
+  --color-canvas: #f9f8f7;
+  --color-canvas-warm: #faf8f5;
+  --color-canvas-dark: #09090a;
+  --color-ink: #32302f;
+  --color-ink-soft: #4d4a46;
+  --color-ink-muted: #686664;
+  --color-ink-faint: #94908d;
+  --color-sage: #486635;
+  --color-sage-soft: #99b383;
+  --color-sage-mist: #e8efe3;
+  --color-dust: #e4e2e1;
+  --color-surface: #fcfcfc;
+  --color-surface-raised: #ffffff;
+  --color-line: #e8e6e4;
+  --color-line-strong: #c9c6c4;
+  --color-accent-warm: #ff8a71;
+  --color-cat-food: #c4b5a5;
+  --color-cat-home: #a8b5a0;
+  --color-cat-transport: #9aafbf;
+  --color-cat-shopping: #b8a9b8;
+  --color-cat-health: #a9b8b0;
+  --color-cat-fun: #c4b89a;
+  --color-cat-bills: #a3a8b0;
+  --color-cat-other: #b0aea8;
+  --font-sans: 'System';
+  --radius-pill: 9999px;
+}
