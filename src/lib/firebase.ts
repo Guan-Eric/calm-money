@@ -1,7 +1,15 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import {
+  getAuth,
+  initializeAuth,
+  // @ts-expect-error React Native–only; present in the RN Firebase Auth bundle
+  getReactNativePersistence,
+  type Auth,
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY ?? 'demo-api-key',
@@ -14,7 +22,22 @@ const firebaseConfig = {
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-export const auth: Auth = getAuth(app);
+/** Keep the user signed in across app launches on iOS/Android. */
+function createAuth(): Auth {
+  if (Platform.OS === 'web') {
+    return getAuth(app);
+  }
+  try {
+    return initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch {
+    // Already initialized (Fast Refresh) or persistence unavailable
+    return getAuth(app);
+  }
+}
+
+export const auth: Auth = createAuth();
 export { app };
 export const db = getFirestore(app);
 export const functions = getFunctions(app);

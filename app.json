@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Calm Money",
+    "name": "Tally",
     "slug": "calm-money",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,18 +8,23 @@
     "scheme": "calmmoney",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f9f8f7"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.calmmoney.app",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Calm Money does not use Face ID; this string satisfies App Store requirements when using Sign in with Apple.",
+        "NSFaceIDUsageDescription": "Tally does not use Face ID; this string satisfies App Store requirements when using Sign in with Apple.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F7F6F2",
+        "backgroundColor": "#f9f8f7",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -39,7 +44,7 @@
       [
         "expo-notifications",
         {
-          "color": "#7A8F7A"
+          "color": "#486635"
         }
       ],
       "expo-dev-client"

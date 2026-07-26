@@ -8,12 +8,22 @@
       "distribution": "internal",
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_MOCK_PREMIUM": "true"
       }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MOCK_PREMIUM": "false"
+      }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_MOCK_PREMIUM": "false"
+      }
+    }
   },
   "submit": {
     "production": {}

@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Alert, Platform, View, Text } from 'react-native';
+import { Alert, Text } from 'react-native';
 import { Link, Redirect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuth } from '@/providers/AuthProvider';
 import {
   Screen,
@@ -14,6 +13,7 @@ import {
   PrimaryButton,
   GhostButton,
 } from '@/components/ui';
+import { AppleSignInButton } from '@/components/AppleSignInButton';
 
 export default function SignInScreen() {
   const { t } = useTranslation();
@@ -68,18 +68,7 @@ export default function SignInScreen() {
       <Label>{t('password')}</Label>
       <Field secureTextEntry value={password} onChangeText={setPassword} placeholder="••••••••" />
       <PrimaryButton label={t('signIn')} loading={loading} onPress={onSubmit} disabled={!configured} />
-      {Platform.OS === 'ios' ? (
-        <View className="mt-5">
-          <Text className="mb-3 text-center text-sm text-ink-faint">{t('or')}</Text>
-          <AppleAuthentication.AppleAuthenticationButton
-            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-            cornerRadius={999}
-            style={{ width: '100%', height: 52 }}
-            onPress={onApple}
-          />
-        </View>
-      ) : null}
+      <AppleSignInButton onPress={onApple} disabled={loading || !configured} />
       <Link href="/(auth)/sign-up" asChild>
         <GhostButton label={t('signUp')} />
       </Link>

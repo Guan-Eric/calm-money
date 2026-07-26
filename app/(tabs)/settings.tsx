@@ -1,14 +1,25 @@
 import React, { useState } from 'react';
-import { ScrollView, Text, Switch, View, Alert } from 'react-native';
+import { ScrollView, Text, View, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { doc, setDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePremium } from '@/providers/PremiumProvider';
-import { Eyebrow, Title, CardRow, GhostButton, SoftButton, SectionHeader } from '@/components/ui';
+import { useTheme } from '@/providers/ThemeProvider';
+import {
+  Eyebrow,
+  Title,
+  CardRow,
+  GhostButton,
+  SoftButton,
+  SectionHeader,
+  SegmentedControl,
+  ThemedSwitch,
+} from '@/components/ui';
 import { db } from '@/lib/firebase';
 import { seedDemoData } from '@/lib/seedDemo';
+import type { AppearancePreference } from '@/theme/native';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -16,6 +27,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { user, profile, household, signOut, refreshHousehold } = useAuth();
   const { isPremium } = usePremium();
+  const { appearance, setAppearance } = useTheme();
   const [seeding, setSeeding] = useState(false);
 
   const prefs = profile?.notificationPrefs ?? {
@@ -53,7 +65,7 @@ export default function SettingsScreen() {
       await refreshHousehold();
       Alert.alert(
         t('appName'),
-        `Added ${transactionCount} demo transactions, sample bank accounts, and Pro for testing. Open Spend to explore.`,
+        `Added ${transactionCount} sample transactions so you can explore Spend.`,
       );
     } catch (e) {
       Alert.alert(t('appName'), e instanceof Error ? e.message : t('errorGeneric'));
@@ -73,6 +85,17 @@ export default function SettingsScreen() {
       <Text className="mt-2 text-[15px] text-ink-muted">
         {profile?.email ?? profile?.displayName ?? ''}
       </Text>
+
+      <SectionHeader>{t('appearance')}</SectionHeader>
+      <SegmentedControl
+        value={appearance}
+        onChange={(k) => setAppearance(k as AppearancePreference)}
+        options={[
+          { key: 'system', label: t('appearanceSystem') },
+          { key: 'light', label: t('appearanceLight') },
+          { key: 'dark', label: t('appearanceDark') },
+        ]}
+      />
 
       <SectionHeader>Money</SectionHeader>
       <CardRow
@@ -113,11 +136,15 @@ export default function SettingsScreen() {
         onChange={(v) => void togglePref('partnerInvite', v)}
       />
 
-      <SectionHeader>Testing</SectionHeader>
-      <Text className="mt-1 mb-2 text-sm text-ink-muted leading-5">
-        Load sample spending, bank accounts, and Pro so you can try the calendar without Plaid.
-      </Text>
-      <SoftButton label={seeding ? 'Loading…' : 'Load demo data'} onPress={onSeedDemo} />
+      {__DEV__ ? (
+        <>
+          <SectionHeader>Testing</SectionHeader>
+          <Text className="mt-1 mb-2 text-sm text-ink-muted leading-5">
+            Sample spending for exploring the calendar without a bank link.
+          </Text>
+          <SoftButton label={seeding ? 'Loading…' : 'Load demo data'} onPress={onSeedDemo} />
+        </>
+      ) : null}
 
       <GhostButton label={t('signOut')} onPress={() => void signOut()} />
     </ScrollView>
@@ -136,12 +163,7 @@ function PrefRow({
   return (
     <View className="flex-row items-center justify-between border-b border-line py-4">
       <Text className="mr-3 flex-1 text-[17px] text-ink">{label}</Text>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ true: '#486635', false: '#e4e2e1' }}
-        thumbColor="#fcfcfc"
-      />
+      <ThemedSwitch value={value} onValueChange={onChange} />
     </View>
   );
 }

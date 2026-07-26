@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Set Firebase Functions secrets for Calm Money.
+# Set Firebase Functions secrets for Tally.
 # Usage:
 #   export PLAID_CLIENT_ID=... PLAID_SECRET=... PLAID_ENV=sandbox
 #   export TOKEN_ENCRYPTION_KEY="$(openssl rand -base64 32)"

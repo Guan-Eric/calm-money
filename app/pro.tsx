@@ -3,11 +3,15 @@ import { Alert, Text } from 'react-native';
 import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { usePremium } from '@/providers/PremiumProvider';
+import { useTheme } from '@/providers/ThemeProvider';
+import { stackHeaderOptions } from '@/theme/native';
 import { Screen, Title, Subtitle, PrimaryButton, GhostButton } from '@/components/ui';
 
 export default function ProScreen() {
   const { t } = useTranslation();
   const { isPremium, presentPaywallHint, purchasePackageById, restore } = usePremium();
+  const { resolvedTheme } = useTheme();
+  const header = stackHeaderOptions(resolvedTheme);
   const [loading, setLoading] = useState(false);
 
   const onPurchase = async () => {
@@ -19,7 +23,7 @@ export default function ProScreen() {
       if (msg.toLowerCase().includes('cancel')) return;
       Alert.alert(
         t('pro'),
-        `${msg}\n\nSet EXPO_PUBLIC_REVENUECAT_* keys and use a dev client. For local UI testing set EXPO_PUBLIC_MOCK_PREMIUM=true.`,
+        `${msg}\n\nSet EXPO_PUBLIC_REVENUECAT_* keys and use a dev client. For local UI testing set EXPO_PUBLIC_MOCK_PREMIUM=true (dev only).`,
       );
     } finally {
       setLoading(false);
@@ -32,9 +36,7 @@ export default function ProScreen() {
         options={{
           headerShown: true,
           title: t('pro'),
-          headerTintColor: '#32302f',
-          headerStyle: { backgroundColor: '#f9f8f7' },
-          headerBackButtonDisplayMode: 'minimal',
+          ...header,
         }}
       />
       <Screen className="pt-6">

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
+import { useTheme } from '@/providers/ThemeProvider';
 import { Eyebrow, Title, Label, Field, PrimaryButton } from '@/components/ui';
 import {
   fetchCategories,
@@ -21,6 +22,7 @@ export default function AddScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, household } = useAuth();
+  const { colors } = useTheme();
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
   const [note, setNote] = useState('');
@@ -139,7 +141,7 @@ export default function AddScreen() {
             onPress={() => setCategoryId(c.id)}
             className="mb-2 mr-2 rounded-full px-4 py-2.5"
             style={{
-              backgroundColor: categoryId === c.id ? c.color : '#efece8',
+              backgroundColor: categoryId === c.id ? c.color : colors.chip,
             }}
           >
             <Text className="text-sm text-ink">{t(`categories.${c.nameKey}`)}</Text>

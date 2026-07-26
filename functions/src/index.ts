@@ -47,7 +47,7 @@ async function requirePremium(uid: string) {
   const data = user.data();
   if (data?.isPremium === true) return data;
   // Allow short grace if premiumSyncedAt is recent and flag missing during race
-  throw new HttpsError('permission-denied', 'Calm Money Pro required');
+  throw new HttpsError('permission-denied', 'Tally Pro required');
 }
 
 async function getUserHousehold(uid: string) {
@@ -100,7 +100,7 @@ export const createLinkToken = onCall({ secrets: PLAID_SECRETS }, async (request
   const codes = countryCodes.map((c) => c as CountryCode);
   const response = await client.linkTokenCreate({
     user: { client_user_id: uid },
-    client_name: 'Calm Money',
+    client_name: 'Tally',
     products: [Products.Transactions],
     country_codes: codes.length ? codes : [CountryCode.Us],
     language: 'en',
@@ -498,7 +498,7 @@ export const weeklyDigest = onSchedule(
       await sendExpoPush(
         data.expoPushToken as string,
         'Your week',
-        `Last week’s spending was about ${amount}. Open Calm Money when you’re ready.`,
+        `Last week’s spending was about ${amount}. Open Tally when you’re ready.`,
       );
     }
   },

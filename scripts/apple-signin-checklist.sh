@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# One-time Apple Sign-In checklist for Calm Money (console steps).
+# One-time Apple Sign-In checklist for Tally (console steps).
 # Client code is already wired (expo-apple-authentication + Firebase OAuthProvider).
 set -euo pipefail
 cat <<'EOF'
-Apple Sign-In setup
-===================
+Apple Sign-In setup (Tally)
+===========================
 1. Apple Developer → Certificates, Identifiers & Profiles
    - App ID com.calmmoney.app: enable "Sign in with Apple"
    - Create Services ID (e.g. com.calmmoney.app.signin)

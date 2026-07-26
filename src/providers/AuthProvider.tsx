@@ -4,15 +4,12 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
-  OAuthProvider,
-  signInWithCredential,
   type User,
 } from 'firebase/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import { Platform } from 'react-native';
 import { auth, db, isFirebaseConfigured } from '@/lib/firebase';
 import { bootstrapUserProfile } from '@/lib/bootstrap';
+import { signInWithAppleNative, takePendingAppleDisplayName } from '@/lib/appleAuth';
 import {
   configurePurchases,
   identifyPurchasesUser,
@@ -57,10 +54,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       try {
+        const appleName = takePendingAppleDisplayName();
         const { user: p, household: h } = await bootstrapUserProfile({
           uid: u.uid,
           email: u.email,
-          displayName: u.displayName,
+          displayName: u.displayName ?? appleName,
         });
         setProfile(p);
         setHousehold(h);
@@ -120,19 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await createUserWithEmailAndPassword(auth, email.trim(), password);
       },
       signInWithApple: async () => {
-        if (Platform.OS !== 'ios') throw new Error('Apple Sign-In is only on iOS');
-        const raw = await AppleAuthentication.signInAsync({
-          requestedScopes: [
-            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-            AppleAuthentication.AppleAuthenticationScope.EMAIL,
-          ],
-        });
-        if (!raw.identityToken) throw new Error('No Apple identity token');
-        const provider = new OAuthProvider('apple.com');
-        const credential = provider.credential({
-          idToken: raw.identityToken,
-        });
-        await signInWithCredential(auth, credential);
+        await signInWithAppleNative();
       },
       signOut: async () => {
         await firebaseSignOut(auth);

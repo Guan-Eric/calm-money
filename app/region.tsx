@@ -4,6 +4,8 @@ import { Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/providers/AuthProvider';
+import { useTheme } from '@/providers/ThemeProvider';
+import { stackHeaderOptions } from '@/theme/native';
 import { Screen, Title, Subtitle, PrimaryButton, SelectField } from '@/components/ui';
 import { db } from '@/lib/firebase';
 import {
@@ -17,6 +19,8 @@ import {
 export default function RegionScreen() {
   const { t } = useTranslation();
   const { household, refreshHousehold } = useAuth();
+  const { resolvedTheme } = useTheme();
+  const header = stackHeaderOptions(resolvedTheme);
   const [country, setCountry] = useState(household?.countryCode ?? 'US');
   const [currency, setCurrency] = useState(household?.defaultCurrency ?? 'USD');
   const [loading, setLoading] = useState(false);
@@ -65,9 +69,7 @@ export default function RegionScreen() {
         options={{
           headerShown: true,
           title: t('region'),
-          headerTintColor: '#32302f',
-          headerStyle: { backgroundColor: '#f9f8f7' },
-          headerBackButtonDisplayMode: 'minimal',
+          ...header,
         }}
       />
       <Screen className="pt-6">

@@ -1,11 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Text, View, Switch, Share, Pressable } from 'react-native';
+import { Alert, Text, View, Share, Pressable } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { doc, setDoc } from 'firebase/firestore';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePremium } from '@/providers/PremiumProvider';
-import { Screen, Title, Subtitle, Label, Field, PrimaryButton, GhostButton, SoftButton } from '@/components/ui';
+import { useTheme } from '@/providers/ThemeProvider';
+import {
+  Screen,
+  Title,
+  Subtitle,
+  Label,
+  Field,
+  PrimaryButton,
+  GhostButton,
+  SoftButton,
+  ThemedSwitch,
+} from '@/components/ui';
+import { stackHeaderOptions } from '@/theme/native';
 import {
   createInvite,
   acceptInvite,
@@ -22,6 +34,8 @@ export default function SharingScreen() {
   const params = useLocalSearchParams<{ code?: string }>();
   const { user, household, profile, refreshHousehold } = useAuth();
   const { isPremium } = usePremium();
+  const { resolvedTheme } = useTheme();
+  const header = stackHeaderOptions(resolvedTheme);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [deepLink, setDeepLink] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState('');
@@ -91,7 +105,7 @@ export default function SharingScreen() {
   const onShareLink = async () => {
     if (!deepLink || !inviteCode) return;
     await Share.share({
-      message: `Join me on Calm Money. Code ${inviteCode} or open ${deepLink}`,
+      message: `Join me on Tally. Code ${inviteCode} or open ${deepLink}`,
     });
   };
 
@@ -158,9 +172,7 @@ export default function SharingScreen() {
         options={{
           headerShown: true,
           title: t('sharing'),
-          headerTintColor: '#32302f',
-          headerStyle: { backgroundColor: '#f9f8f7' },
-          headerBackButtonDisplayMode: 'minimal',
+          ...header,
         }}
       />
       <Screen className="pt-6">
@@ -175,12 +187,7 @@ export default function SharingScreen() {
           {hasPartner ? (
             <View className="mt-6 flex-row items-center justify-between border-b border-line py-4">
               <Text className="mr-3 flex-1 text-[17px] text-ink">{t('shareMyTransactions')}</Text>
-              <Switch
-                value={share}
-                onValueChange={(v) => void onToggleShare(v)}
-                trackColor={{ true: '#486635', false: '#e4e2e1' }}
-                thumbColor="#fcfcfc"
-              />
+              <ThemedSwitch value={share} onValueChange={(v) => void onToggleShare(v)} />
             </View>
           ) : (
             <Text className="mt-6 text-[17px] text-ink-muted">{t('waitingOnPartner')}</Text>

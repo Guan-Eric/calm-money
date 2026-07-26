@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, Pressable, Alert } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, ScrollView, Pressable, Alert, RefreshControl } from 'react-native';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePremium } from '@/providers/PremiumProvider';
+import { useTheme } from '@/providers/ThemeProvider';
 import { SpendingCalendar } from '@/components/SpendingCalendar';
 import {
   Eyebrow,
@@ -23,14 +24,16 @@ import {
   getSharingPrefs,
 } from '@/lib/transactions';
 import { listenBankAccounts } from '@/lib/bank';
+import { syncPlaidTransactions } from '@/lib/plaid';
 import { formatMoney } from '@/lib/money';
 import type { Category, Transaction, SharingPrefs } from '@/types/models';
 
 export default function CalendarScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { user, profile, household } = useAuth();
-  const { isPremium } = usePremium();
+  const { user, profile, household, refreshHousehold } = useAuth();
+  const { isPremium, refresh: refreshPremium } = usePremium();
+  const { colors } = useTheme();
   const [month, setMonth] = useState(new Date());
   const [selected, setSelected] = useState(new Date());
   const [mode, setMode] = useState<'mine' | 'ours'>('mine');
@@ -38,6 +41,7 @@ export default function CalendarScreen() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [partnerSharing, setPartnerSharing] = useState<SharingPrefs | null>(null);
   const [hiddenAccountIds, setHiddenAccountIds] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!household?.id) return;
@@ -72,6 +76,31 @@ export default function CalendarScreen() {
     void getSharingPrefs(partnerId, household.id).then(setPartnerSharing);
   }, [household, user]);
 
+  const onRefresh = useCallback(async () => {
+    if (!user || !household) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refreshHousehold(),
+        refreshPremium(),
+        fetchCategories(household.id).then(setCategories),
+        (async () => {
+          const partnerId = household.memberIds.find((id) => id !== user.uid);
+          if (!partnerId) {
+            setPartnerSharing(null);
+            return;
+          }
+          setPartnerSharing(await getSharingPrefs(partnerId, household.id));
+        })(),
+        isPremium
+          ? syncPlaidTransactions().catch(() => null)
+          : Promise.resolve(null),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user, household, isPremium, refreshHousehold, refreshPremium]);
+
   const visible = useMemo(() => {
     if (!user) return [];
     return filterVisibleTransactions({
@@ -84,9 +113,7 @@ export default function CalendarScreen() {
   }, [txns, user, mode, partnerSharing, hiddenAccountIds]);
 
   const onMonthChange = (next: Date) => {
-    if (!isPremium && next.getFullYear() < new Date().getFullYear()) {
-      return;
-    }
+    if (!isPremium && next.getFullYear() < new Date().getFullYear()) return;
     setMonth(next);
   };
 
@@ -106,9 +133,7 @@ export default function CalendarScreen() {
   const recent = useMemo(() => {
     const start = format(startOfMonth(month), 'yyyy-MM-dd');
     const end = format(endOfMonth(month), 'yyyy-MM-dd');
-    return visible
-      .filter((t) => t.date >= start && t.date <= end)
-      .slice(0, 12);
+    return visible.filter((t) => t.date >= start && t.date <= end).slice(0, 12);
   }, [visible, month]);
 
   const onChangeCategory = async (txn: Transaction, categoryId: string) => {
@@ -126,11 +151,24 @@ export default function CalendarScreen() {
     }
   };
 
+  const prevDisabled =
+    !isPremium &&
+    month.getFullYear() === new Date().getFullYear() &&
+    month.getMonth() === 0;
+
   return (
     <ScrollView
       className="flex-1 bg-canvas"
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 48, paddingHorizontal: 24 }}
       showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void onRefresh()}
+          tintColor={colors.sage}
+          colors={[colors.sage]}
+        />
+      }
     >
       <Eyebrow>{t('monthTotal')}</Eyebrow>
       <HeroAmount>{formatMoney(monthTotal, currency, profile?.locale)}</HeroAmount>
@@ -155,16 +193,9 @@ export default function CalendarScreen() {
           currency={currency}
           selected={selected}
           onSelectDay={setSelected}
+          prevDisabled={prevDisabled}
         />
       </View>
-
-      <CategoryInsights
-        transactions={visible}
-        categories={categories}
-        currency={currency}
-        month={month}
-        locale={profile?.locale}
-      />
 
       {!isPremium ? (
         <Text className="mt-4 text-sm text-ink-faint">
@@ -187,7 +218,7 @@ export default function CalendarScreen() {
                   (cat ? ` · ${t(`categories.${cat.nameKey}`)}` : '')
                 }
                 amount={formatMoney(txn.amountMinor, txn.currency, profile?.locale)}
-                color={cat?.color ?? '#e4e2e1'}
+                color={cat?.color ?? colors.dust}
                 onPress={() => {
                   if (txn.createdBy !== user?.uid) return;
                   Alert.alert(txn.merchant, undefined, [
@@ -207,7 +238,7 @@ export default function CalendarScreen() {
                     onPress={() => void onChangeCategory(txn, c.id)}
                     className="mr-2 rounded-full px-3.5 py-2"
                     style={{
-                      backgroundColor: txn.categoryId === c.id ? c.color : '#efece8',
+                      backgroundColor: txn.categoryId === c.id ? c.color : colors.chip,
                     }}
                   >
                     <Text className="text-xs text-ink">{t(`categories.${c.nameKey}`)}</Text>
@@ -230,13 +261,21 @@ export default function CalendarScreen() {
                 title={txn.merchant}
                 subtitle={txn.date}
                 amount={formatMoney(txn.amountMinor, txn.currency, profile?.locale)}
-                color={cat?.color ?? '#e4e2e1'}
+                color={cat?.color ?? colors.dust}
                 onPress={() => setSelected(new Date(txn.date + 'T12:00:00'))}
               />
             );
           })}
         </>
       ) : null}
+
+      <CategoryInsights
+        transactions={visible}
+        categories={categories}
+        currency={currency}
+        month={month}
+        locale={profile?.locale}
+      />
 
       {visible.length === 0 ? (
         <Text className="mt-12 text-center text-[17px] text-ink-muted leading-7">{t('emptyCalendar')}</Text>

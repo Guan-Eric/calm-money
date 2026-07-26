@@ -74,7 +74,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       isPremium,
       customerInfo,
       refresh,
-      presentPaywallHint: `Unlock Calm Money Pro (${ENTITLEMENT_ID}) for bank sync, sharing, and longer history.`,
+      presentPaywallHint: `Unlock Tally Pro (${ENTITLEMENT_ID}) for bank sync, sharing, and longer history.`,
       purchasePackageById: async (packageId: string) => {
         const offerings = await Purchases.getOfferings();
         const pkg =

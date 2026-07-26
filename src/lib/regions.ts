@@ -1,4 +1,4 @@
-/** Countries Calm Money / Plaid commonly support for bank link + formatting. */
+/** Countries Tally / Plaid commonly support for bank link + formatting. */
 export type RegionOption = {
   code: string;
   name: string;

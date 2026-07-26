@@ -1,6 +1,6 @@
 {
   "name": "calm-money-functions",
-  "description": "Cloud Functions for Calm Money (Plaid, invites, notifications)",
+  "description": "Cloud Functions for Tally (Plaid, invites, notifications)",
   "engines": {
     "node": "20"
   },

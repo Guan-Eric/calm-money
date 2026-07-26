@@ -5,24 +5,38 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from '@/providers/AuthProvider';
 import { PremiumProvider } from '@/providers/PremiumProvider';
+import { ThemeProvider, useTheme } from '@/providers/ThemeProvider';
+import { stackHeaderOptions } from '@/theme/native';
+
+function RootNavigator() {
+  const { resolvedTheme, colors } = useTheme();
+  const header = stackHeaderOptions(resolvedTheme);
+
+  return (
+    <>
+      <StatusBar style={resolvedTheme === 'dark' ? 'light' : 'dark'} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'fade',
+          ...header,
+          contentStyle: { backgroundColor: colors.canvas },
+        }}
+      />
+    </>
+  );
+}
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <PremiumProvider>
-          <StatusBar style="dark" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              animation: 'fade',
-              headerBackButtonDisplayMode: 'minimal',
-              headerTintColor: '#32302f',
-              headerStyle: { backgroundColor: '#f9f8f7' },
-            }}
-          />
-        </PremiumProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <PremiumProvider>
+            <RootNavigator />
+          </PremiumProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }

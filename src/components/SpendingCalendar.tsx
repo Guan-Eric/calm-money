@@ -19,6 +19,7 @@ type Props = {
   currency: string;
   selected: Date;
   onSelectDay: (d: Date) => void;
+  prevDisabled?: boolean;
 };
 
 export function SpendingCalendar({
@@ -28,6 +29,7 @@ export function SpendingCalendar({
   currency,
   selected,
   onSelectDay,
+  prevDisabled,
 }: Props) {
   const days = useMemo(() => {
     const start = startOfMonth(month);
@@ -51,15 +53,18 @@ export function SpendingCalendar({
     <View>
       <View className="mb-5 flex-row items-center justify-between">
         <Pressable
+          disabled={prevDisabled}
           onPress={() => onMonthChange(subMonths(month, 1))}
-          className="h-10 w-10 items-center justify-center rounded-full bg-dust/70"
+          className={`h-10 w-10 items-center justify-center rounded-full bg-dust ${
+            prevDisabled ? 'opacity-30' : ''
+          }`}
         >
           <Text className="text-lg text-ink">‹</Text>
         </Pressable>
         <Text className="text-base font-medium text-ink">{format(month, 'MMMM yyyy')}</Text>
         <Pressable
           onPress={() => onMonthChange(addMonths(month, 1))}
-          className="h-10 w-10 items-center justify-center rounded-full bg-dust/70"
+          className="h-10 w-10 items-center justify-center rounded-full bg-dust"
         >
           <Text className="text-lg text-ink">›</Text>
         </Pressable>
@@ -104,7 +109,7 @@ export function SpendingCalendar({
                     ? 'font-medium text-surface'
                     : isSameMonth(day, month)
                       ? 'text-ink'
-                      : 'text-ink-faint/40'
+                      : 'text-ink-faint'
                 }`}
               >
                 {format(day, 'd')}

@@ -15,7 +15,7 @@ export function configurePurchases() {
     return;
   }
   try {
-    Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+    Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.INFO);
     Purchases.configure({ apiKey });
     configured = true;
   } catch (e) {
@@ -46,9 +46,13 @@ export function hasPremium(info: CustomerInfo | null): boolean {
   return Boolean(info.entitlements.active[ENTITLEMENT_ID]);
 }
 
-/** Dev override when keys missing — never treat as real entitlement in production builds. */
+/**
+ * Local / development-client Pro override.
+ * Requires both __DEV__ and EXPO_PUBLIC_MOCK_PREMIUM=true so release builds fail closed
+ * even if the env flag is accidentally set.
+ */
 export function mockPremiumAllowed(): boolean {
-  return process.env.EXPO_PUBLIC_MOCK_PREMIUM === 'true';
+  return __DEV__ && process.env.EXPO_PUBLIC_MOCK_PREMIUM === 'true';
 }
 
 export { ENTITLEMENT_ID, Purchases };

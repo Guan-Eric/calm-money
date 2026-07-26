@@ -13,10 +13,11 @@ import {
   PrimaryButton,
   GhostButton,
 } from '@/components/ui';
+import { AppleSignInButton } from '@/components/AppleSignInButton';
 
 export default function SignUpScreen() {
   const { t } = useTranslation();
-  const { user, signUp, configured } = useAuth();
+  const { user, signUp, signInWithApple, configured } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,6 +29,18 @@ export default function SignUpScreen() {
     try {
       await signUp(email, password);
     } catch (e) {
+      Alert.alert(t('appName'), e instanceof Error ? e.message : t('errorGeneric'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onApple = async () => {
+    setLoading(true);
+    try {
+      await signInWithApple();
+    } catch (e) {
+      if ((e as { code?: string }).code === 'ERR_REQUEST_CANCELED') return;
       Alert.alert(t('appName'), e instanceof Error ? e.message : t('errorGeneric'));
     } finally {
       setLoading(false);
@@ -55,6 +68,7 @@ export default function SignUpScreen() {
         placeholder="At least 6 characters"
       />
       <PrimaryButton label={t('signUp')} loading={loading} onPress={onSubmit} disabled={!configured} />
+      <AppleSignInButton onPress={onApple} disabled={loading || !configured} />
       <Link href="/(auth)/sign-in" asChild>
         <GhostButton label={t('signIn')} />
       </Link>

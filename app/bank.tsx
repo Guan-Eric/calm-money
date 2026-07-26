@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, Text, View, Switch, ScrollView, Pressable } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Platform, Text, View, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePremium } from '@/providers/PremiumProvider';
-import { Title, Subtitle, PrimaryButton, SoftButton, GhostButton } from '@/components/ui';
+import { useTheme } from '@/providers/ThemeProvider';
+import { Title, Subtitle, PrimaryButton, SoftButton, GhostButton, ThemedSwitch } from '@/components/ui';
+import { stackHeaderOptions } from '@/theme/native';
 import { createPlaidLinkToken, exchangePlaidPublicToken, syncPlaidTransactions } from '@/lib/plaid';
 import {
   listenBankAccounts,
@@ -19,7 +21,10 @@ export default function BankScreen() {
   const router = useRouter();
   const { user, household } = useAuth();
   const { isPremium } = usePremium();
+  const { resolvedTheme, colors } = useTheme();
+  const header = stackHeaderOptions(resolvedTheme);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [connections, setConnections] = useState<BankConnection[]>([]);
@@ -60,6 +65,21 @@ export default function BankScreen() {
       return [...prev, code];
     });
   };
+
+  const onRefresh = useCallback(async () => {
+    if (!isPremium || connections.length === 0) return;
+    setRefreshing(true);
+    try {
+      const { count } = await syncPlaidTransactions();
+      setStatus(
+        `Updated ${count} transactions across ${connections.length} bank${connections.length === 1 ? '' : 's'}.`,
+      );
+    } catch (e) {
+      Alert.alert(t('appName'), e instanceof Error ? e.message : t('errorGeneric'));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [isPremium, connections.length, t]);
 
   const openPlaid = async () => {
     if (!household || !requirePro()) return;
@@ -125,14 +145,21 @@ export default function BankScreen() {
         options={{
           headerShown: true,
           title: t('connectBank'),
-          headerTintColor: '#32302f',
-          headerStyle: { backgroundColor: '#f9f8f7' },
-          headerBackButtonDisplayMode: 'minimal',
+          ...header,
         }}
       />
       <ScrollView
         className="flex-1 bg-canvas"
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40, paddingTop: 16 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={colors.sage}
+            colors={[colors.sage]}
+            enabled={isPremium && connections.length > 0}
+          />
+        }
       >
         <Title>{t('connectBank')}</Title>
         <Subtitle>
@@ -148,7 +175,7 @@ export default function BankScreen() {
                 key={r.code}
                 onPress={() => toggleLinkCountry(r.code)}
                 className="mb-2 mr-2 rounded-full px-3.5 py-2"
-                style={{ backgroundColor: on ? '#486635' : '#efece8' }}
+                style={{ backgroundColor: on ? colors.sage : colors.chip }}
               >
                 <Text className={`text-sm ${on ? 'text-surface' : 'text-ink'}`}>{r.code}</Text>
               </Pressable>
@@ -200,7 +227,7 @@ export default function BankScreen() {
                         {a.isHidden ? 'Hidden from calendar' : 'Shown on calendar'}
                       </Text>
                     </View>
-                    <Switch
+                    <ThemedSwitch
                       value={!a.isHidden}
                       onValueChange={(v) => {
                         void setBankAccountHidden(a.id, !v).catch((e) =>
@@ -210,8 +237,6 @@ export default function BankScreen() {
                           ),
                         );
                       }}
-                      trackColor={{ true: '#486635', false: '#e4e2e1' }}
-                      thumbColor="#fcfcfc"
                     />
                   </View>
                 ))}

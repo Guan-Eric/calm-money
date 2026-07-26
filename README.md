@@ -1,8 +1,8 @@
-# Calm Money
+# Tally
 
-*Working title — product name TBD.*
+*Money planner — see where your money goes without guilt.*
 
-A calm spending app: see where your money goes without guilt. Built with **Expo**, **React Native**, **Uniwind**, **Firebase**, **Plaid**, and **RevenueCat**.
+Built with **Expo**, **React Native**, **Uniwind**, **Firebase**, **Plaid**, and **RevenueCat**.
 
 **North star:** opening the app should feel like checking the weather, not opening a report card.
 
@@ -28,7 +28,7 @@ All design decisions filter through [CONSTITUTION.md](./CONSTITUTION.md).
 
 2. **Firebase Console (required once)**  
    - Authentication → Sign-in method → enable **Email/Password**  
-   - Authentication → Sign-in method → enable **Apple** (Services ID, key, return URLs — see Phase A below)  
+   - Authentication → Sign-in method → enable **Apple** (see `./scripts/apple-signin-checklist.sh`)  
    - [Upgrade to Blaze](https://console.firebase.google.com/project/calm-money-app/usage/details) to deploy Cloud Functions
 
 3. Install & run:
@@ -42,7 +42,6 @@ All design decisions filter through [CONSTITUTION.md](./CONSTITUTION.md).
    ```bash
    npx -y firebase-tools@latest login --reauth
    npx -y firebase-tools@latest use calm-money-app
-   # Generate encryption key once: openssl rand -base64 32
    export PLAID_CLIENT_ID=... PLAID_SECRET=... PLAID_ENV=sandbox
    export TOKEN_ENCRYPTION_KEY="$(openssl rand -base64 32)"
    ./scripts/set-function-secrets.sh
@@ -50,42 +49,33 @@ All design decisions filter through [CONSTITUTION.md](./CONSTITUTION.md).
    npx -y firebase-tools@latest deploy --only firestore,functions
    ```
 
-5. Local Pro testing without store:
+5. Local Pro testing (development only — release builds ignore this flag):
    ```
    EXPO_PUBLIC_MOCK_PREMIUM=true
    ```
 
-## Phase A — Ops (ship blockers)
+## Builds (EAS profiles)
 
-### Firebase Blaze + Functions
-1. Upgrade `calm-money-app` to Blaze in the Firebase console.
-2. Set secrets via `./scripts/set-function-secrets.sh` (`PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `TOKEN_ENCRYPTION_KEY`).
-3. Deploy: `npx firebase-tools@latest deploy --only firestore,functions --project calm-money-app`.
+| Profile | Mock Pro | RevenueCat | Plaid |
+|---------|----------|------------|-------|
+| `development` | on (`eas.json` env) | `test_…` OK | sandbox |
+| `preview` | off | `test_…` OK until live | sandbox |
+| `production` | off | `appl_` / `goog_` via EAS secrets | production |
 
-### Apple Sign-In
-1. Apple Developer → Identifiers → create **Services ID** for Sign in with Apple (bundle `com.calmmoney.app`).
-2. Create a Sign in with Apple key; download `.p8`.
-3. Firebase Auth → Sign-in method → Apple → enable; paste Services ID, Team ID, Key ID, private key.
-4. Return URL from Firebase into Apple Services ID configuration.
-
-### Dev client / EAS
-1. EAS project is linked (`extra.eas.projectId` in `app.json`).
-2. Build a development client (Plaid Link + purchases need native modules):
-   ```bash
-   npx expo run:ios
-   # or, when EAS iOS build quota allows:
-   npx eas build --profile development --platform ios
-   ```
-3. `eas.json` has a `development` profile with `developmentClient: true`.
-
-### Plaid secrets
-Placeholder secrets were set so Functions could deploy. Replace with real Sandbox credentials:
 ```bash
-export PLAID_CLIENT_ID=... PLAID_SECRET=... PLAID_ENV=sandbox
-export TOKEN_ENCRYPTION_KEY="$(openssl rand -base64 32)"  # only if rotating
-./scripts/set-function-secrets.sh
-npx firebase-tools@latest deploy --only functions --project calm-money-app
+npx eas build --profile development --platform ios
+npx eas build --profile preview --platform ios
+npx eas build --profile production --platform ios
 ```
+
+**Where secrets live**
+
+- **Expo public env** (`EXPO_PUBLIC_*`): Firebase client config, RevenueCat public SDK keys, mock Pro flag.
+- **Firebase Functions secrets** (never in the app): `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `TOKEN_ENCRYPTION_KEY` via `./scripts/set-function-secrets.sh`.
+
+Ship checklist: `./scripts/production-checklist.sh`  
+Apple Sign-In: `./scripts/apple-signin-checklist.sh`  
+Icon / logo prompt: [docs/icon-logo-prompt.md](./docs/icon-logo-prompt.md)
 
 ## App structure
 
@@ -104,4 +94,4 @@ npx firebase-tools@latest deploy --only functions --project calm-money-app
 
 ## Status
 
-Plan B MVP + remaining functionality product code. Phase A ops need console login (Blaze, secrets deploy, Apple provider, EAS project id).
+MVP product code + prod/dev build hygiene. Console steps (live Plaid, App Store IAP, privacy URL) remain before store submission — see the production checklist.

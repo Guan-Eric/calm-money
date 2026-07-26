@@ -1,11 +1,10 @@
 @import 'tailwindcss';
 @import 'uniwind';
 
-/* Wealthsimple-inspired: warm paper neutrals, olive primary, editorial calm */
+/* Register utilities + shared tokens; @variant overrides semantic colors per theme */
 @theme {
   --color-canvas: #f9f8f7;
   --color-canvas-warm: #faf8f5;
-  --color-canvas-dark: #09090a;
   --color-ink: #32302f;
   --color-ink-soft: #4d4a46;
   --color-ink-muted: #686664;
@@ -18,6 +17,8 @@
   --color-surface-raised: #ffffff;
   --color-line: #e8e6e4;
   --color-line-strong: #c9c6c4;
+  --color-chip: #efece8;
+  --color-overlay: rgba(0, 0, 0, 0.3);
   --color-accent-warm: #ff8a71;
   --color-cat-food: #c4b5a5;
   --color-cat-home: #a8b5a0;
@@ -29,4 +30,46 @@
   --color-cat-other: #b0aea8;
   --font-sans: 'System';
   --radius-pill: 9999px;
+}
+
+@layer theme {
+  :root {
+    @variant light {
+      --color-canvas: #f9f8f7;
+      --color-canvas-warm: #faf8f5;
+      --color-ink: #32302f;
+      --color-ink-soft: #4d4a46;
+      --color-ink-muted: #686664;
+      --color-ink-faint: #94908d;
+      --color-sage: #486635;
+      --color-sage-soft: #99b383;
+      --color-sage-mist: #e8efe3;
+      --color-dust: #e4e2e1;
+      --color-surface: #fcfcfc;
+      --color-surface-raised: #ffffff;
+      --color-line: #e8e6e4;
+      --color-line-strong: #c9c6c4;
+      --color-chip: #efece8;
+      --color-overlay: rgba(0, 0, 0, 0.3);
+    }
+
+    @variant dark {
+      --color-canvas: #121110;
+      --color-canvas-warm: #161513;
+      --color-ink: #f2efeb;
+      --color-ink-soft: #d8d4ce;
+      --color-ink-muted: #a8a39c;
+      --color-ink-faint: #7a756f;
+      --color-sage: #8fad73;
+      --color-sage-soft: #6a8a55;
+      --color-sage-mist: #243022;
+      --color-dust: #2a2826;
+      --color-surface: #1a1917;
+      --color-surface-raised: #22211e;
+      --color-line: #2e2c29;
+      --color-line-strong: #45423e;
+      --color-chip: #2a2826;
+      --color-overlay: rgba(0, 0, 0, 0.55);
+    }
+  }
 }

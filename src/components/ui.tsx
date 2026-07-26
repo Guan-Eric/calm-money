@@ -6,10 +6,12 @@ import {
   TextInput,
   Modal,
   FlatList,
+  Switch,
   type TextInputProps,
   type PressableProps,
   ActivityIndicator,
 } from 'react-native';
+import { useTheme } from '@/providers/ThemeProvider';
 
 export function Screen({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <View className={`flex-1 bg-canvas px-6 ${className}`}>{children}</View>;
@@ -40,9 +42,10 @@ export function Label({ children }: { children: React.ReactNode }) {
 }
 
 export function Field(props: TextInputProps) {
+  const { colors } = useTheme();
   return (
     <TextInput
-      placeholderTextColor="#94908d"
+      placeholderTextColor={colors.inkFaint}
       className="rounded-full border border-line bg-surface-raised px-5 py-4 text-[17px] text-ink"
       {...props}
     />
@@ -54,13 +57,14 @@ export function PrimaryButton({
   loading,
   ...props
 }: PressableProps & { label: string; loading?: boolean }) {
+  const { colors, resolvedTheme } = useTheme();
   return (
     <Pressable
       className={`mt-6 items-center rounded-full bg-ink px-5 py-4 ${props.disabled ? 'opacity-40' : ''}`}
       {...props}
     >
       {loading ? (
-        <ActivityIndicator color="#fcfcfc" />
+        <ActivityIndicator color={resolvedTheme === 'dark' ? colors.canvas : colors.surface} />
       ) : (
         <Text className="text-[17px] font-medium text-surface">{label}</Text>
       )}
@@ -73,13 +77,14 @@ export function SoftButton({
   loading,
   ...props
 }: PressableProps & { label: string; loading?: boolean }) {
+  const { colors } = useTheme();
   return (
     <Pressable
       className={`mt-3 items-center rounded-full bg-sage-mist px-5 py-4 ${props.disabled ? 'opacity-40' : ''}`}
       {...props}
     >
       {loading ? (
-        <ActivityIndicator color="#486635" />
+        <ActivityIndicator color={colors.sage} />
       ) : (
         <Text className="text-[17px] font-medium text-sage">{label}</Text>
       )}
@@ -105,7 +110,7 @@ export function SegmentedControl({
   onChange: (key: string) => void;
 }) {
   return (
-    <View className="mt-5 flex-row rounded-full bg-dust/60 p-1">
+    <View className="mt-5 flex-row rounded-full bg-dust p-1">
       {options.map((opt) => {
         const active = opt.key === value;
         return (
@@ -215,13 +220,13 @@ export function SelectField({
       </Pressable>
 
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <Pressable className="flex-1 justify-end bg-black/30" onPress={() => setOpen(false)}>
+        <Pressable className="flex-1 justify-end bg-overlay" onPress={() => setOpen(false)}>
           <Pressable
-            className="max-h-[70%] rounded-t-[28px] bg-canvas px-2 pb-10 pt-3"
+            className="max-h-[70%] rounded-t-[28px] bg-surface-raised px-2 pb-10 pt-3"
             onPress={(e) => e.stopPropagation()}
           >
             <View className="mb-2 items-center">
-              <View className="h-1 w-10 rounded-full bg-line" />
+              <View className="h-1 w-10 rounded-full bg-line-strong" />
             </View>
             <FlatList
               data={options}
@@ -252,7 +257,21 @@ export function SelectField({
   );
 }
 
-
 export function SectionHeader({ children }: { children: React.ReactNode }) {
   return <Text className="mb-1 mt-8 text-xl font-medium text-ink tracking-tight">{children}</Text>;
+}
+
+export function ThemedSwitch(props: {
+  value: boolean;
+  onValueChange: (v: boolean) => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Switch
+      value={props.value}
+      onValueChange={props.onValueChange}
+      trackColor={{ true: colors.sage, false: colors.switchTrackOff }}
+      thumbColor={colors.switchThumb}
+    />
+  );
 }

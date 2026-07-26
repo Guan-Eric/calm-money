@@ -1,4 +1,4 @@
-# Constitution — [App Name TBD]
+# Constitution — Tally
 
 *A calm, honest way to see where your money goes.*
 
