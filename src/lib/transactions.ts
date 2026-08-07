@@ -27,6 +27,7 @@ export async function fetchCategories(householdId: string): Promise<Category[]> 
 
 export function listenTransactions(params: {
   householdId: string;
+  uid: string;
   onData: (txns: Transaction[]) => void;
   onError?: (e: Error) => void;
   /** When false, only current calendar year is returned (free tier). */
@@ -34,22 +35,54 @@ export function listenTransactions(params: {
 }): Unsubscribe {
   const year = new Date().getFullYear();
   const yearStart = `${year}-01-01`;
-  const constraints = [
+
+  // Split queries so security rules never see partner-private docs in one result set
+  const mineConstraints = [
     where('householdId', '==', params.householdId),
+    where('createdBy', '==', params.uid),
+    orderBy('date', 'desc'),
+  ];
+  const sharedConstraints = [
+    where('householdId', '==', params.householdId),
+    where('visibility', '==', 'household'),
     orderBy('date', 'desc'),
   ];
   if (!params.isPremium) {
-    constraints.splice(1, 0, where('date', '>=', yearStart));
+    mineConstraints.splice(2, 0, where('date', '>=', yearStart));
+    sharedConstraints.splice(2, 0, where('date', '>=', yearStart));
   }
-  const q = query(collection(db, 'transactions'), ...constraints);
-  return onSnapshot(
-    q,
+
+  let mine: Transaction[] = [];
+  let shared: Transaction[] = [];
+
+  const emit = () => {
+    const byId = new Map<string, Transaction>();
+    for (const t of [...mine, ...shared]) byId.set(t.id, t);
+    const merged = Array.from(byId.values()).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    params.onData(merged);
+  };
+
+  const unsubMine = onSnapshot(
+    query(collection(db, 'transactions'), ...mineConstraints),
     (snap) => {
-      const txns = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Transaction, 'id'>) }));
-      params.onData(txns);
+      mine = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Transaction, 'id'>) }));
+      emit();
     },
     (err) => params.onError?.(err as Error),
   );
+  const unsubShared = onSnapshot(
+    query(collection(db, 'transactions'), ...sharedConstraints),
+    (snap) => {
+      shared = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Transaction, 'id'>) }));
+      emit();
+    },
+    (err) => params.onError?.(err as Error),
+  );
+
+  return () => {
+    unsubMine();
+    unsubShared();
+  };
 }
 
 export function filterVisibleTransactions(params: {
@@ -60,7 +93,8 @@ export function filterVisibleTransactions(params: {
   /** Bank account IDs marked hidden — excluded from calendar intensity / totals. */
   hiddenAccountIds?: Set<string>;
 }): Transaction[] {
-  const { txns, uid, mode, partnerSharing, hiddenAccountIds } = params;
+  const { txns, uid, mode, hiddenAccountIds } = params;
+  void params.partnerSharing;
   const notHidden = (t: Transaction) => {
     if (!t.externalAccountId || !hiddenAccountIds?.size) return true;
     return !hiddenAccountIds.has(t.externalAccountId);
@@ -68,12 +102,11 @@ export function filterVisibleTransactions(params: {
   if (mode === 'mine') {
     return txns.filter((t) => t.createdBy === uid && notHidden(t));
   }
+  // Rules only allow partner docs with visibility == 'household'
   return txns.filter((t) => {
     if (!notHidden(t)) return false;
     if (t.createdBy === uid) return true;
-    if (t.visibility === 'household') return true;
-    if (partnerSharing?.shareTransactions && partnerSharing.userId === t.createdBy) return true;
-    return false;
+    return t.visibility === 'household';
   });
 }
 

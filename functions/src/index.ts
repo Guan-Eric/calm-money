@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { defineSecret } from 'firebase-functions/params';
+import { defineSecret, defineString } from 'firebase-functions/params';
 import {
   Configuration,
   PlaidApi,
@@ -19,8 +19,11 @@ const db = getFirestore();
 const plaidClientId = defineSecret('PLAID_CLIENT_ID');
 const plaidSecret = defineSecret('PLAID_SECRET');
 const plaidEnv = defineSecret('PLAID_ENV');
+/** Optional — set via `firebase functions:config` / params; empty = sandbox client-claim mode only */
+const revenueCatSecretParam = defineString('REVENUECAT_SECRET_API_KEY', { default: '' });
 
 const PLAID_SECRETS = [plaidClientId, plaidSecret, plaidEnv, tokenEncryptionKey];
+const PREMIUM_SECRETS = [plaidEnv];
 
 function plaidClient() {
   const env = (plaidEnv.value() || 'sandbox') as keyof typeof PlaidEnvironments;
@@ -42,11 +45,35 @@ function requireAuth(uid: string | undefined): string {
   return uid;
 }
 
+function isSandboxPlaid(): boolean {
+  try {
+    return (plaidEnv.value() || 'sandbox') === 'sandbox';
+  } catch {
+    return true;
+  }
+}
+
+async function verifyRevenueCatPremium(uid: string, secret: string): Promise<boolean> {
+  const res = await fetch(`https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(uid)}`, {
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) return false;
+  const body = (await res.json()) as {
+    subscriber?: { entitlements?: Record<string, { expires_date?: string | null }> };
+  };
+  const ent = body.subscriber?.entitlements?.premium;
+  if (!ent) return false;
+  if (!ent.expires_date) return true;
+  return new Date(ent.expires_date).getTime() > Date.now();
+}
+
 async function requirePremium(uid: string) {
   const user = await db.collection('users').doc(uid).get();
   const data = user.data();
   if (data?.isPremium === true) return data;
-  // Allow short grace if premiumSyncedAt is recent and flag missing during race
   throw new HttpsError('permission-denied', 'Tally Pro required');
 }
 
@@ -54,9 +81,17 @@ async function getUserHousehold(uid: string) {
   const user = await db.collection('users').doc(uid).get();
   if (!user.exists) throw new HttpsError('failed-precondition', 'User profile missing');
   const householdId = user.data()?.householdId as string;
+  if (!householdId) throw new HttpsError('failed-precondition', 'Household missing');
   const hh = await db.collection('households').doc(householdId).get();
   if (!hh.exists) throw new HttpsError('failed-precondition', 'Household missing');
-  return { householdId, user: user.data()!, household: hh.data()! };
+  const memberIds = (hh.data()?.memberIds as string[]) ?? [];
+  if (!memberIds.includes(uid)) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Not a household member — repair membership or leave and rejoin',
+    );
+  }
+  return { householdId, user: user.data()!, household: hh.data()!, memberIds };
 }
 
 async function categoryMap(householdId: string): Promise<Record<string, string>> {
@@ -90,6 +125,96 @@ async function sendExpoPush(token: string, title: string, body: string) {
 function inviteDeepLink(code: string) {
   return `calmmoney://invite?code=${encodeURIComponent(code)}`;
 }
+
+const DEFAULT_CATEGORIES = [
+  { nameKey: 'food', color: '#c4b5a5', icon: 'fork.knife', sortOrder: 0 },
+  { nameKey: 'home', color: '#a8b5a0', icon: 'house', sortOrder: 1 },
+  { nameKey: 'transport', color: '#9aafbf', icon: 'car', sortOrder: 2 },
+  { nameKey: 'shopping', color: '#b8a9b8', icon: 'bag', sortOrder: 3 },
+  { nameKey: 'health', color: '#a9b8b0', icon: 'heart', sortOrder: 4 },
+  { nameKey: 'fun', color: '#c4b89a', icon: 'sparkles', sortOrder: 5 },
+  { nameKey: 'bills', color: '#a3a8b0', icon: 'doc.text', sortOrder: 6 },
+  { nameKey: 'subscriptions', color: '#b0a8b8', icon: 'repeat', sortOrder: 7 },
+  { nameKey: 'other', color: '#b0aea8', icon: 'circle', sortOrder: 8 },
+];
+
+/** Move the user's bank + txn docs to a new household (leave / accept). */
+async function rehomeUserFinancialData(uid: string, fromHouseholdId: string, toHouseholdId: string) {
+  const connections = await db.collection('bankConnections').where('userId', '==', uid).get();
+  const accounts = await db.collection('bankAccounts').where('ownerUserId', '==', uid).get();
+  const txns = await db
+    .collection('transactions')
+    .where('householdId', '==', fromHouseholdId)
+    .where('createdBy', '==', uid)
+    .get();
+
+  type Op = () => void;
+  const ops: Op[] = [];
+  let batch = db.batch();
+  let count = 0;
+
+  const enqueue = (fn: Op) => {
+    ops.push(fn);
+  };
+
+  for (const d of connections.docs) {
+    enqueue(() => batch.update(d.ref, { householdId: toHouseholdId }));
+    const secretRef = db.collection('bankConnectionSecrets').doc(d.id);
+    enqueue(() => batch.set(secretRef, { householdId: toHouseholdId }, { merge: true }));
+  }
+  for (const d of accounts.docs) {
+    enqueue(() => batch.update(d.ref, { householdId: toHouseholdId }));
+  }
+  for (const d of txns.docs) {
+    enqueue(() => batch.update(d.ref, { householdId: toHouseholdId }));
+  }
+
+  for (const op of ops) {
+    if (count >= 400) {
+      await batch.commit();
+      batch = db.batch();
+      count = 0;
+    }
+    op();
+    count += 1;
+  }
+  if (count > 0) await batch.commit();
+}
+
+/** Sync Pro flag. Production: verify via RevenueCat secret. Sandbox: allow client claim. */
+export const syncPremiumStatus = onCall({ secrets: PREMIUM_SECRETS }, async (request) => {
+  const uid = requireAuth(request.auth?.uid);
+  const claimed = Boolean(request.data?.isPremium);
+  let allowed = false;
+
+  let secret = '';
+  try {
+    secret = revenueCatSecretParam.value() || '';
+  } catch {
+    secret = '';
+  }
+
+  if (secret && !secret.startsWith('REPLACE')) {
+    allowed = await verifyRevenueCatPremium(uid, secret);
+  } else if (isSandboxPlaid()) {
+    // Local / sandbox only — never trust client claim in production Plaid env
+    allowed = claimed;
+  } else {
+    throw new HttpsError(
+      'failed-precondition',
+      'Set REVENUECAT_SECRET_API_KEY to sync Pro in production',
+    );
+  }
+
+  await db.collection('users').doc(uid).set(
+    {
+      isPremium: allowed,
+      premiumSyncedAt: Date.now(),
+    },
+    { merge: true },
+  );
+  return { isPremium: allowed };
+});
 
 export const createLinkToken = onCall({ secrets: PLAID_SECRETS }, async (request) => {
   const uid = requireAuth(request.auth?.uid);
@@ -215,27 +340,41 @@ export const syncTransactions = onCall({ secrets: PLAID_SECRETS }, async (reques
           });
           const amountMinor = Math.round(Math.abs(txn.amount) * 100);
           const id = `plaid_${txn.transaction_id}`;
-          await db.collection('transactions').doc(id).set(
-            {
-              householdId,
-              createdBy: uid,
-              amountMinor,
-              currency: txn.iso_currency_code ?? 'USD',
-              date: txn.date,
-              merchant,
-              categoryId,
-              note: null,
-              source: 'bank',
-              provider: 'plaid',
-              externalTxnId: txn.transaction_id,
-              externalAccountId: txn.account_id,
-              pending: txn.pending,
+          const ref = db.collection('transactions').doc(id);
+          const existing = await ref.get();
+          const base = {
+            householdId,
+            createdBy: uid,
+            amountMinor,
+            currency: txn.iso_currency_code ?? 'USD',
+            date: txn.date,
+            merchant,
+            categoryId,
+            note: existing.exists ? (existing.data()?.note ?? null) : null,
+            source: 'bank' as const,
+            provider: 'plaid',
+            externalTxnId: txn.transaction_id,
+            externalAccountId: txn.account_id,
+            pending: txn.pending,
+            updatedAt: Date.now(),
+          };
+          if (!existing.exists) {
+            await ref.set({
+              ...base,
               visibility: share ? 'household' : 'private',
               createdAt: Date.now(),
-              updatedAt: Date.now(),
-            },
-            { merge: true },
-          );
+            });
+          } else {
+            // Preserve visibility + createdAt; keep user category overrides if set via merchant rule already applied
+            const prevCat = existing.data()?.categoryId;
+            await ref.set(
+              {
+                ...base,
+                categoryId: prevCat || categoryId,
+              },
+              { merge: true },
+            );
+          }
           count += 1;
         }
 
@@ -291,11 +430,21 @@ export const setBankAccountHidden = onCall(async (request) => {
 export const createHouseholdInvite = onCall(async (request) => {
   const uid = requireAuth(request.auth?.uid);
   await requirePremium(uid);
-  const { householdId } = await getUserHousehold(uid);
-  const hh = await db.collection('households').doc(householdId).get();
-  if ((hh.data()?.memberIds as string[])?.length >= 2) {
+  const { householdId, memberIds } = await getUserHousehold(uid);
+  if (memberIds.length >= 2) {
     throw new HttpsError('failed-precondition', 'Household is full');
   }
+
+  // Revoke any prior pending invites so only one live code exists
+  const prior = await db
+    .collection('householdInvites')
+    .where('householdId', '==', householdId)
+    .where('createdBy', '==', uid)
+    .where('status', '==', 'pending')
+    .get();
+  const revokeBatch = db.batch();
+  prior.docs.forEach((d) => revokeBatch.update(d.ref, { status: 'revoked' }));
+  if (!prior.empty) await revokeBatch.commit();
 
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
@@ -312,10 +461,7 @@ export const createHouseholdInvite = onCall(async (request) => {
     createdAt: now,
     expiresAt,
   });
-  await db.collection('households').doc(householdId).update({
-    inviteCode: code,
-    inviteExpiresAt: expiresAt,
-  });
+  // Do not mirror code onto the household doc (readable by all members)
 
   return { id, code, expiresAt, deepLink: inviteDeepLink(code) };
 });
@@ -331,10 +477,6 @@ export const revokeHouseholdInvite = onCall(async (request) => {
     .get();
   const batch = db.batch();
   snap.docs.forEach((d) => batch.update(d.ref, { status: 'revoked' }));
-  batch.update(db.collection('households').doc(householdId), {
-    inviteCode: null,
-    inviteExpiresAt: null,
-  });
   await batch.commit();
   return { revoked: snap.size };
 });
@@ -360,49 +502,62 @@ export const acceptHouseholdInvite = onCall(async (request) => {
   if (invite.createdBy === uid) throw new HttpsError('invalid-argument', 'Cannot accept own invite');
 
   const householdId = invite.householdId as string;
-  const hhRef = db.collection('households').doc(householdId);
-  const hh = await hhRef.get();
-  if (!hh.exists) throw new HttpsError('not-found', 'Household missing');
-  const memberIds = (hh.data()?.memberIds as string[]) ?? [];
-  if (memberIds.length >= 2) throw new HttpsError('failed-precondition', 'Household is full');
-
   const userRef = db.collection('users').doc(uid);
   const user = await userRef.get();
   const oldHouseholdId = user.data()?.householdId as string | undefined;
 
-  const batch = db.batch();
-  batch.update(hhRef, {
-    memberIds: FieldValue.arrayUnion(uid),
-    inviteCode: null,
-    inviteExpiresAt: null,
+  await db.runTransaction(async (tx) => {
+    const hhRef = db.collection('households').doc(householdId);
+    const hh = await tx.get(hhRef);
+    if (!hh.exists) throw new HttpsError('not-found', 'Household missing');
+    const memberIds = (hh.data()?.memberIds as string[]) ?? [];
+    if (memberIds.includes(uid)) {
+      tx.update(inviteDoc.ref, { status: 'accepted' });
+      return;
+    }
+    if (memberIds.length >= 2) throw new HttpsError('failed-precondition', 'Household is full');
+
+    tx.update(hhRef, {
+      memberIds: FieldValue.arrayUnion(uid),
+      inviteCode: null,
+      inviteExpiresAt: null,
+    });
+    tx.update(userRef, { householdId });
+    tx.update(inviteDoc.ref, { status: 'accepted' });
+    tx.set(
+      db.collection('sharingPrefs').doc(`${uid}_${householdId}`),
+      {
+        id: `${uid}_${householdId}`,
+        householdId,
+        userId: uid,
+        shareTransactions: false,
+        shareAccountIds: [],
+      },
+      { merge: true },
+    );
+
+    if (oldHouseholdId && oldHouseholdId !== householdId) {
+      const oldRef = db.collection('households').doc(oldHouseholdId);
+      const oldHh = await tx.get(oldRef);
+      tx.update(oldRef, { memberIds: FieldValue.arrayRemove(uid) });
+      const oldMembers = (oldHh.data()?.memberIds as string[]) ?? [];
+      if (oldMembers.length <= 1) {
+        // Categories cleaned after transaction (reads outside tx)
+      }
+    }
   });
-  batch.update(userRef, { householdId });
-  batch.update(inviteDoc.ref, { status: 'accepted' });
-  batch.set(
-    db.collection('sharingPrefs').doc(`${uid}_${householdId}`),
-    {
-      id: `${uid}_${householdId}`,
-      householdId,
-      userId: uid,
-      shareTransactions: false,
-      shareAccountIds: [],
-    },
-    { merge: true },
-  );
 
   if (oldHouseholdId && oldHouseholdId !== householdId) {
+    await rehomeUserFinancialData(uid, oldHouseholdId, householdId);
     const oldHh = await db.collection('households').doc(oldHouseholdId).get();
     const oldMembers = (oldHh.data()?.memberIds as string[]) ?? [];
-    batch.update(db.collection('households').doc(oldHouseholdId), {
-      memberIds: FieldValue.arrayRemove(uid),
-    });
-    // Solo orphan: remove leftover categories so they don't linger without an owner
-    if (oldMembers.length <= 1) {
+    if (oldMembers.length === 0) {
       const oldCats = await db.collection('categories').where('householdId', '==', oldHouseholdId).get();
-      oldCats.docs.forEach((d) => batch.delete(d.ref));
+      const b = db.batch();
+      oldCats.docs.forEach((d) => b.delete(d.ref));
+      if (!oldCats.empty) await b.commit();
     }
   }
-  await batch.commit();
 
   const inviter = await db.collection('users').doc(invite.createdBy as string).get();
   const inviterData = inviter.data();
@@ -425,18 +580,6 @@ export const leaveHousehold = onCall(async (request) => {
   const countryCode = (household.countryCode as string) ?? 'US';
   const defaultCurrency = (household.defaultCurrency as string) ?? 'USD';
 
-  const DEFAULTS = [
-    { nameKey: 'food', color: '#c4b5a5', icon: 'fork.knife', sortOrder: 0 },
-    { nameKey: 'home', color: '#a8b5a0', icon: 'house', sortOrder: 1 },
-    { nameKey: 'transport', color: '#9aafbf', icon: 'car', sortOrder: 2 },
-    { nameKey: 'shopping', color: '#b8a9b8', icon: 'bag', sortOrder: 3 },
-    { nameKey: 'health', color: '#a9b8b0', icon: 'heart', sortOrder: 4 },
-    { nameKey: 'fun', color: '#c4b89a', icon: 'sparkles', sortOrder: 5 },
-    { nameKey: 'bills', color: '#a3a8b0', icon: 'doc.text', sortOrder: 6 },
-    { nameKey: 'subscriptions', color: '#b0a8b8', icon: 'repeat', sortOrder: 7 },
-    { nameKey: 'other', color: '#b0aea8', icon: 'circle', sortOrder: 8 },
-  ];
-
   const batch = db.batch();
   batch.set(db.collection('households').doc(newId), {
     memberIds: [uid],
@@ -455,11 +598,14 @@ export const leaveHousehold = onCall(async (request) => {
     shareTransactions: false,
     shareAccountIds: [],
   });
-  for (const cat of DEFAULTS) {
+  for (const cat of DEFAULT_CATEGORIES) {
     const ref = db.collection('categories').doc();
     batch.set(ref, { householdId: newId, ...cat });
   }
   await batch.commit();
+
+  await rehomeUserFinancialData(uid, householdId, newId);
+
   return { householdId: newId };
 });
 

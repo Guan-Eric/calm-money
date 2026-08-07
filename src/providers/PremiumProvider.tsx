@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { CustomerInfo } from 'react-native-purchases';
-import { doc, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import {
   Purchases,
   hasPremium,
@@ -8,7 +8,7 @@ import {
   ENTITLEMENT_ID,
 } from '@/lib/purchases';
 import { useAuth } from '@/providers/AuthProvider';
-import { db } from '@/lib/firebase';
+import { functions } from '@/lib/firebase';
 
 type PremiumContextValue = {
   isPremium: boolean;
@@ -21,12 +21,11 @@ type PremiumContextValue = {
 
 const PremiumContext = createContext<PremiumContextValue | null>(null);
 
-async function mirrorPremiumToFirestore(uid: string, isPremium: boolean) {
+/** Mirror Pro via Cloud Function (client cannot write isPremium directly). */
+async function mirrorPremiumToFirestore(isPremium: boolean) {
   try {
-    await updateDoc(doc(db, 'users', uid), {
-      isPremium,
-      premiumSyncedAt: Date.now(),
-    });
+    const fn = httpsCallable(functions, 'syncPremiumStatus');
+    await fn({ isPremium });
   } catch (e) {
     console.warn('[Premium] mirror failed:', e);
   }
@@ -66,7 +65,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!user) return;
-    void mirrorPremiumToFirestore(user.uid, isPremium);
+    void mirrorPremiumToFirestore(isPremium);
   }, [user, isPremium]);
 
   const value = useMemo<PremiumContextValue>(
@@ -83,12 +82,12 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         if (!pkg) throw new Error('No packages available');
         const { customerInfo: info } = await Purchases.purchasePackage(pkg);
         setCustomerInfo(info);
-        if (user) await mirrorPremiumToFirestore(user.uid, hasPremium(info) || mockPremiumAllowed());
+        await mirrorPremiumToFirestore(hasPremium(info) || mockPremiumAllowed());
       },
       restore: async () => {
         const info = await Purchases.restorePurchases();
         setCustomerInfo(info);
-        if (user) await mirrorPremiumToFirestore(user.uid, hasPremium(info) || mockPremiumAllowed());
+        await mirrorPremiumToFirestore(hasPremium(info) || mockPremiumAllowed());
       },
     }),
     [isPremium, customerInfo, user],

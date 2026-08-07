@@ -52,6 +52,7 @@ export default function CalendarScreen() {
     if (!household?.id || !user) return;
     const unsub = listenTransactions({
       householdId: household.id,
+      uid: user.uid,
       isPremium,
       onData: setTxns,
       onError: (e) => console.warn(e),

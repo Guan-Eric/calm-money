@@ -3,7 +3,8 @@ import { ScrollView, Text, View, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePremium } from '@/providers/PremiumProvider';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -17,7 +18,7 @@ import {
   SegmentedControl,
   ThemedSwitch,
 } from '@/components/ui';
-import { db } from '@/lib/firebase';
+import { db, functions } from '@/lib/firebase';
 import { seedDemoData } from '@/lib/seedDemo';
 import type { AppearancePreference } from '@/theme/native';
 
@@ -51,11 +52,11 @@ export default function SettingsScreen() {
     if (!user || !household) return;
     setSeeding(true);
     try {
-      await setDoc(
-        doc(db, 'users', user.uid),
-        { isPremium: true, premiumSyncedAt: Date.now() },
-        { merge: true },
-      );
+      try {
+        await httpsCallable(functions, 'syncPremiumStatus')({ isPremium: true });
+      } catch {
+        // Sandbox Pro mirror may fail if Functions not deployed — demo seed still useful
+      }
       const { transactionCount } = await seedDemoData({
         uid: user.uid,
         householdId: household.id,

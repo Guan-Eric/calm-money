@@ -1,6 +1,7 @@
 import {
   doc,
   getDoc,
+  setDoc,
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -9,6 +10,16 @@ import { deviceCountryCode, deviceCurrencyCode, deviceLocale } from '@/lib/money
 
 function newId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** Ensure profile household includes this uid in memberIds (orphan self-heal). */
+async function repairMembershipIfNeeded(uid: string, householdId: string) {
+  const ref = doc(db, 'households', householdId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const members = (snap.data().memberIds as string[]) ?? [];
+  if (members.includes(uid)) return;
+  await setDoc(ref, { memberIds: [...members, uid] }, { merge: true });
 }
 
 export async function bootstrapUserProfile(params: {
@@ -20,6 +31,7 @@ export async function bootstrapUserProfile(params: {
   const existing = await getDoc(userRef);
   if (existing.exists()) {
     const data = existing.data() as AppUser;
+    await repairMembershipIfNeeded(params.uid, data.householdId);
     const householdSnap = await getDoc(doc(db, 'households', data.householdId));
     return {
       user: { ...data, uid: params.uid },
@@ -65,14 +77,14 @@ export async function bootstrapUserProfile(params: {
     displayNameInHousehold: params.displayName,
   };
 
-  const batch = writeBatch(db);
-  batch.set(doc(db, 'households', householdId), {
+  // Sequential writes so category rules can see the committed household + membership
+  await setDoc(doc(db, 'households', householdId), {
     memberIds: household.memberIds,
     createdAt: household.createdAt,
     countryCode: household.countryCode,
     defaultCurrency: household.defaultCurrency,
   });
-  batch.set(userRef, {
+  await setDoc(userRef, {
     email: user.email,
     displayName: user.displayName,
     householdId: user.householdId,
@@ -80,12 +92,14 @@ export async function bootstrapUserProfile(params: {
     expoPushToken: null,
     notificationPrefs: user.notificationPrefs,
     createdAt: user.createdAt,
+    isPremium: false,
   });
-  batch.set(doc(db, 'sharingPrefs', sharing.id), sharing);
+  await setDoc(doc(db, 'sharingPrefs', sharing.id), sharing);
 
+  const catBatch = writeBatch(db);
   for (const cat of DEFAULT_CATEGORIES) {
     const catId = newId('cat');
-    batch.set(doc(db, 'categories', catId), {
+    catBatch.set(doc(db, 'categories', catId), {
       householdId,
       nameKey: cat.nameKey,
       color: cat.color,
@@ -93,8 +107,8 @@ export async function bootstrapUserProfile(params: {
       sortOrder: cat.sortOrder,
     });
   }
+  await catBatch.commit();
 
-  await batch.commit();
   return { user, household };
 }
 

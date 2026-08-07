@@ -1,16 +1,12 @@
 import {
   collection,
-  doc,
   getDocs,
   query,
   where,
-  writeBatch,
-  arrayRemove,
-  getDoc,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '@/lib/firebase';
-import { DEFAULT_CATEGORIES, type HouseholdInvite } from '@/types/models';
+import type { HouseholdInvite } from '@/types/models';
 
 export async function createInvite(params: {
   householdId: string;
@@ -47,45 +43,13 @@ export async function acceptInvite(params: {
   return (res.data as { householdId: string }).householdId;
 }
 
-export async function leaveHousehold(params: {
+export async function leaveHousehold(_params: {
   uid: string;
   householdId: string;
 }): Promise<string> {
-  try {
-    const fn = httpsCallable(functions, 'leaveHousehold');
-    const res = await fn({});
-    return (res.data as { householdId: string }).householdId;
-  } catch {
-    const newId = `hh_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-    const now = Date.now();
-    const old = await getDoc(doc(db, 'households', params.householdId));
-    const countryCode = (old.data()?.countryCode as string) ?? 'US';
-    const defaultCurrency = (old.data()?.defaultCurrency as string) ?? 'USD';
-    const batch = writeBatch(db);
-    batch.set(doc(db, 'households', newId), {
-      memberIds: [params.uid],
-      createdAt: now,
-      countryCode,
-      defaultCurrency,
-    });
-    batch.update(doc(db, 'households', params.householdId), {
-      memberIds: arrayRemove(params.uid),
-    });
-    batch.update(doc(db, 'users', params.uid), { householdId: newId });
-    batch.set(doc(db, 'sharingPrefs', `${params.uid}_${newId}`), {
-      id: `${params.uid}_${newId}`,
-      householdId: newId,
-      userId: params.uid,
-      shareTransactions: false,
-      shareAccountIds: [],
-    });
-    for (const cat of DEFAULT_CATEGORIES) {
-      const ref = doc(collection(db, 'categories'));
-      batch.set(ref, { householdId: newId, ...cat });
-    }
-    await batch.commit();
-    return newId;
-  }
+  const fn = httpsCallable(functions, 'leaveHousehold');
+  const res = await fn({});
+  return (res.data as { householdId: string }).householdId;
 }
 
 export async function getPendingInviteForHousehold(householdId: string, createdBy: string) {

@@ -1,0 +1,27 @@
+# EAS upload cheat sheet — RevenueCat + Firebase (Calm Money / Tally)
+# Project RC: proj0479c91e
+#
+# Option A — values already in eas.json profile `env` for RC keys.
+# Still add Firebase keys as EAS project secrets / env (not committed below for safety),
+# or paste them into each profile's env in eas.json from your local .env.
+#
+# Option B — Expo dashboard → Project → Environment variables:
+#
+# === development + preview ===
+EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=test_KEgtZJOFLltfayEQdQBZBsEQmCa
+EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=test_KEgtZJOFLltfayEQdQBZBsEQmCa
+EXPO_PUBLIC_MOCK_PREMIUM=true
+# (preview: set MOCK_PREMIUM=false)
+
+# === production ===
+EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=appl_OEoSdfFGPGSLYbtRWgHxOCxEmDW
+EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=goog_REPLACE_AFTER_CREATING_PLAY_APP
+EXPO_PUBLIC_MOCK_PREMIUM=false
+
+# === Firebase (all profiles — copy from local .env) ===
+# EXPO_PUBLIC_FIREBASE_API_KEY=
+# EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
+# EXPO_PUBLIC_FIREBASE_PROJECT_ID=
+# EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
+# EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+# EXPO_PUBLIC_FIREBASE_APP_ID=
