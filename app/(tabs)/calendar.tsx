@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, Alert, RefreshControl } from 'react-native';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/providers/AuthProvider';
 import { usePremium } from '@/providers/PremiumProvider';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useTransactions } from '@/providers/TransactionsProvider';
 import { SpendingCalendar } from '@/components/SpendingCalendar';
 import {
   Eyebrow,
@@ -15,127 +17,68 @@ import {
   SectionHeader,
 } from '@/components/ui';
 import { CategoryInsights } from '@/components/CategoryInsights';
-import {
-  fetchCategories,
-  listenTransactions,
-  filterVisibleTransactions,
-  updateTransactionCategory,
-  deleteTransaction,
-  getSharingPrefs,
-} from '@/lib/transactions';
-import { listenBankAccounts } from '@/lib/bank';
-import { syncPlaidTransactions } from '@/lib/plaid';
+import { updateTransactionCategory, deleteTransaction } from '@/lib/transactions';
+import { takeCalendarFocus } from '@/lib/calendarFocus';
+import { atLocalNoon, fromDateKey, toDateKey } from '@/lib/localDate';
 import { formatMoney } from '@/lib/money';
-import type { Category, Transaction, SharingPrefs } from '@/types/models';
+import type { Transaction } from '@/types/models';
 
 export default function CalendarScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { user, profile, household, refreshHousehold } = useAuth();
-  const { isPremium, refresh: refreshPremium } = usePremium();
+  const { user, profile, household } = useAuth();
+  const { isPremium } = usePremium();
   const { colors } = useTheme();
-  const [month, setMonth] = useState(new Date());
-  const [selected, setSelected] = useState(new Date());
+  const { categories, visible, refresh } = useTransactions();
+  const [month, setMonth] = useState(() => atLocalNoon(new Date()));
+  const [selected, setSelected] = useState(() => atLocalNoon(new Date()));
   const [mode, setMode] = useState<'mine' | 'ours'>('mine');
-  const [txns, setTxns] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [partnerSharing, setPartnerSharing] = useState<SharingPrefs | null>(null);
-  const [hiddenAccountIds, setHiddenAccountIds] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    if (!household?.id) return;
-    void fetchCategories(household.id).then(setCategories);
-  }, [household?.id]);
-
-  useEffect(() => {
-    if (!household?.id || !user) return;
-    const unsub = listenTransactions({
-      householdId: household.id,
-      uid: user.uid,
-      isPremium,
-      onData: setTxns,
-      onError: (e) => console.warn(e),
-    });
-    return unsub;
-  }, [household?.id, user, isPremium]);
-
-  useEffect(() => {
-    if (!household?.id) return;
-    return listenBankAccounts(household.id, (accounts) => {
-      setHiddenAccountIds(new Set(accounts.filter((a) => a.isHidden).map((a) => a.id)));
-    });
-  }, [household?.id]);
-
-  useEffect(() => {
-    if (!household || !user) return;
-    const partnerId = household.memberIds.find((id) => id !== user.uid);
-    if (!partnerId) {
-      setPartnerSharing(null);
-      return;
-    }
-    void getSharingPrefs(partnerId, household.id).then(setPartnerSharing);
-  }, [household, user]);
+  useFocusEffect(
+    useCallback(() => {
+      const dateKey = takeCalendarFocus();
+      if (!dateKey) return;
+      const day = fromDateKey(dateKey);
+      setSelected(day);
+      setMonth(day);
+    }, []),
+  );
 
   const onRefresh = useCallback(async () => {
-    if (!user || !household) return;
     setRefreshing(true);
     try {
-      await Promise.all([
-        refreshHousehold(),
-        refreshPremium(),
-        fetchCategories(household.id).then(setCategories),
-        (async () => {
-          const partnerId = household.memberIds.find((id) => id !== user.uid);
-          if (!partnerId) {
-            setPartnerSharing(null);
-            return;
-          }
-          setPartnerSharing(await getSharingPrefs(partnerId, household.id));
-        })(),
-        isPremium
-          ? syncPlaidTransactions().catch(() => null)
-          : Promise.resolve(null),
-      ]);
+      await refresh();
     } finally {
       setRefreshing(false);
     }
-  }, [user, household, isPremium, refreshHousehold, refreshPremium]);
-
-  const visible = useMemo(() => {
-    if (!user) return [];
-    return filterVisibleTransactions({
-      txns,
-      uid: user.uid,
-      mode,
-      partnerSharing,
-      hiddenAccountIds,
-    });
-  }, [txns, user, mode, partnerSharing, hiddenAccountIds]);
+  }, [refresh]);
 
   const onMonthChange = (next: Date) => {
-    if (!isPremium && next.getFullYear() < new Date().getFullYear()) return;
-    setMonth(next);
+    const local = atLocalNoon(next);
+    if (!isPremium && local.getFullYear() < new Date().getFullYear()) return;
+    setMonth(local);
   };
 
+  const visibleTxns = visible(mode);
   const currency = household?.defaultCurrency ?? 'USD';
   const monthPrefix = format(month, 'yyyy-MM');
   const monthTotal = useMemo(() => {
-    return visible
-      .filter((t) => t.currency === currency && t.date.startsWith(monthPrefix))
-      .reduce((s, t) => s + t.amountMinor, 0);
-  }, [visible, currency, monthPrefix]);
+    return visibleTxns
+      .filter((txn) => txn.currency === currency && txn.date.startsWith(monthPrefix))
+      .reduce((s, txn) => s + txn.amountMinor, 0);
+  }, [visibleTxns, currency, monthPrefix]);
 
-  const dayKey = format(selected, 'yyyy-MM-dd');
-  const dayTxns = visible.filter((t) => t.date === dayKey);
+  const dayKey = toDateKey(selected);
+  const dayTxns = visibleTxns.filter((txn) => txn.date === dayKey);
   const catMap = Object.fromEntries(categories.map((c) => [c.id, c]));
   const hasPartner = (household?.memberIds.length ?? 0) > 1;
 
   const recent = useMemo(() => {
     const start = format(startOfMonth(month), 'yyyy-MM-dd');
     const end = format(endOfMonth(month), 'yyyy-MM-dd');
-    return visible.filter((t) => t.date >= start && t.date <= end).slice(0, 12);
-  }, [visible, month]);
+    return visibleTxns.filter((txn) => txn.date >= start && txn.date <= end).slice(0, 12);
+  }, [visibleTxns, month]);
 
   const onChangeCategory = async (txn: Transaction, categoryId: string) => {
     if (!user || !household) return;
@@ -190,10 +133,10 @@ export default function CalendarScreen() {
         <SpendingCalendar
           month={month}
           onMonthChange={onMonthChange}
-          transactions={visible}
+          transactions={visibleTxns}
           currency={currency}
           selected={selected}
-          onSelectDay={setSelected}
+          onSelectDay={(d) => setSelected(atLocalNoon(d))}
           prevDisabled={prevDisabled}
         />
       </View>
@@ -263,7 +206,7 @@ export default function CalendarScreen() {
                 subtitle={txn.date}
                 amount={formatMoney(txn.amountMinor, txn.currency, profile?.locale)}
                 color={cat?.color ?? colors.dust}
-                onPress={() => setSelected(new Date(txn.date + 'T12:00:00'))}
+                onPress={() => setSelected(fromDateKey(txn.date))}
               />
             );
           })}
@@ -271,14 +214,14 @@ export default function CalendarScreen() {
       ) : null}
 
       <CategoryInsights
-        transactions={visible}
+        transactions={visibleTxns}
         categories={categories}
         currency={currency}
         month={month}
         locale={profile?.locale}
       />
 
-      {visible.length === 0 ? (
+      {visibleTxns.length === 0 ? (
         <Text className="mt-12 text-center text-[17px] text-ink-muted leading-7">{t('emptyCalendar')}</Text>
       ) : null}
     </ScrollView>

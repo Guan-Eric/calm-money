@@ -37,9 +37,10 @@ Plaid (Cloud Functions secrets)
 
 RevenueCat
 ----------
-  Preview: test_… keys OK
+  Preview: test_… keys OK — see docs/revenuecat-setup.md
   Production: create App Store + Play apps in RevenueCat; use appl_/goog_ in EAS secrets
   Entitlement id: premium
+  Server: REVENUECAT_SECRET_API_KEY=sk_… so syncPremiumStatus can verify purchases
 
 App Store / Play (production only)
 ----------------------------------

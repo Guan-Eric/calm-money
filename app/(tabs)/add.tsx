@@ -7,13 +7,11 @@ import { useTranslation } from 'react-i18next';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useTransactions } from '@/providers/TransactionsProvider';
 import { Eyebrow, Title, Label, Field, PrimaryButton } from '@/components/ui';
-import {
-  fetchCategories,
-  suggestCategoryId,
-  createManualTransaction,
-  getSharingPrefs,
-} from '@/lib/transactions';
+import { fetchCategories, suggestCategoryId } from '@/lib/transactions';
+import { queueCalendarFocus } from '@/lib/calendarFocus';
+import { atLocalNoon, toDateKey } from '@/lib/localDate';
 import { parseAmountToMinor } from '@/lib/money';
 import type { Category } from '@/types/models';
 
@@ -23,16 +21,17 @@ export default function AddScreen() {
   const router = useRouter();
   const { user, household } = useAuth();
   const { colors } = useTheme();
+  const { addManual } = useTransactions();
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
   const [note, setNote] = useState('');
-  const [dateObj, setDateObj] = useState(new Date());
+  const [dateObj, setDateObj] = useState(() => atLocalNoon(new Date()));
   const [showPicker, setShowPicker] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const date = format(dateObj, 'yyyy-MM-dd');
+  const date = toDateKey(dateObj);
 
   useEffect(() => {
     if (!household?.id) return;
@@ -66,22 +65,19 @@ export default function AddScreen() {
     if (!categoryId) return;
     setLoading(true);
     try {
-      const prefs = await getSharingPrefs(user.uid, household.id);
-      await createManualTransaction({
-        householdId: household.id,
-        uid: user.uid,
+      await addManual({
         amountMinor,
-        currency: household.defaultCurrency,
         date,
         merchant: merchant.trim(),
         categoryId,
         note: note.trim() || undefined,
-        shareTransactions: prefs?.shareTransactions ?? false,
       });
       setAmount('');
       setMerchant('');
       setNote('');
-      router.push('/(tabs)/calendar');
+      setDateObj(atLocalNoon(new Date()));
+      queueCalendarFocus(date);
+      router.navigate('/(tabs)/calendar');
     } catch (e) {
       Alert.alert(t('appName'), e instanceof Error ? e.message : t('errorGeneric'));
     } finally {
@@ -124,7 +120,7 @@ export default function AddScreen() {
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={(_, selected) => {
             if (Platform.OS !== 'ios') setShowPicker(false);
-            if (selected) setDateObj(selected);
+            if (selected) setDateObj(atLocalNoon(selected));
           }}
         />
       ) : null}

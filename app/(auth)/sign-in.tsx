@@ -14,6 +14,7 @@ import {
   GhostButton,
 } from '@/components/ui';
 import { AppleSignInButton } from '@/components/AppleSignInButton';
+import { formatAppleAuthError } from '@/lib/appleAuth';
 
 export default function SignInScreen() {
   const { t } = useTranslation();
@@ -41,7 +42,9 @@ export default function SignInScreen() {
       await signInWithApple();
     } catch (e) {
       if ((e as { code?: string }).code === 'ERR_REQUEST_CANCELED') return;
-      Alert.alert(t('appName'), e instanceof Error ? e.message : t('errorGeneric'));
+      const message = formatAppleAuthError(e);
+      if (!message) return;
+      Alert.alert(t('appName'), message);
     } finally {
       setLoading(false);
     }

@@ -17,9 +17,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.calmmoney.app",
       "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.developer.applesignin": ["Default"]
+      },
       "infoPlist": {
         "NSFaceIDUsageDescription": "Tally does not use Face ID; this string satisfies App Store requirements when using Sign in with Apple.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
       }
     },
     "android": {
@@ -40,6 +44,7 @@
       "expo-router",
       "expo-localization",
       "expo-secure-store",
+      "expo-crypto",
       "expo-apple-authentication",
       [
         "expo-notifications",
