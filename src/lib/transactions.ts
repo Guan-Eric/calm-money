@@ -15,7 +15,16 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { categorizeTransaction, normalizeMerchantKey } from '@/lib/categorize';
+import { firestoreDateKey } from '@/lib/localDate';
 import type { Category, Transaction, MerchantRule, SharingPrefs } from '@/types/models';
+
+function txnFromDoc(id: string, data: Omit<Transaction, 'id'>): Transaction {
+  return {
+    id,
+    ...data,
+    date: firestoreDateKey(data.date),
+  };
+}
 
 export async function fetchCategories(householdId: string): Promise<Category[]> {
   const q = query(collection(db, 'categories'), where('householdId', '==', householdId));
@@ -58,14 +67,17 @@ export function listenTransactions(params: {
   const emit = () => {
     const byId = new Map<string, Transaction>();
     for (const t of [...mine, ...shared]) byId.set(t.id, t);
-    const merged = Array.from(byId.values()).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    const merged = Array.from(byId.values()).sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+    });
     params.onData(merged);
   };
 
   const unsubMine = onSnapshot(
     query(collection(db, 'transactions'), ...mineConstraints),
     (snap) => {
-      mine = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Transaction, 'id'>) }));
+      mine = snap.docs.map((d) => txnFromDoc(d.id, d.data() as Omit<Transaction, 'id'>));
       emit();
     },
     (err) => params.onError?.(err as Error),
@@ -73,7 +85,7 @@ export function listenTransactions(params: {
   const unsubShared = onSnapshot(
     query(collection(db, 'transactions'), ...sharedConstraints),
     (snap) => {
-      shared = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Transaction, 'id'>) }));
+      shared = snap.docs.map((d) => txnFromDoc(d.id, d.data() as Omit<Transaction, 'id'>));
       emit();
     },
     (err) => params.onError?.(err as Error),

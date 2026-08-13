@@ -31,6 +31,8 @@ All design decisions filter through [CONSTITUTION.md](./CONSTITUTION.md).
    - Authentication → Sign-in method → enable **Apple** (see `./scripts/apple-signin-checklist.sh`)  
    - [Upgrade to Blaze](https://console.firebase.google.com/project/calm-money-app/usage/details) to deploy Cloud Functions
 
+   RevenueCat dashboard mapping (products, entitlement `premium`, EAS keys, Functions secret): [docs/revenuecat-setup.md](./docs/revenuecat-setup.md).
+
 3. Install & run:
    ```bash
    npm install
@@ -75,6 +77,7 @@ npx eas build --profile production --platform ios
 
 Ship checklist: `./scripts/production-checklist.sh`  
 Apple Sign-In: `./scripts/apple-signin-checklist.sh`  
+RevenueCat mapping: [docs/revenuecat-setup.md](./docs/revenuecat-setup.md)  
 Icon / logo prompt: [docs/icon-logo-prompt.md](./docs/icon-logo-prompt.md)
 
 ## App structure

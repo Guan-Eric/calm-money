@@ -14,6 +14,8 @@ import {
   GhostButton,
 } from '@/components/ui';
 import { AppleSignInButton } from '@/components/AppleSignInButton';
+import { formatAppleAuthError } from '@/lib/appleAuth';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 export default function SignUpScreen() {
   const { t } = useTranslation();
@@ -41,7 +43,9 @@ export default function SignUpScreen() {
       await signInWithApple();
     } catch (e) {
       if ((e as { code?: string }).code === 'ERR_REQUEST_CANCELED') return;
-      Alert.alert(t('appName'), e instanceof Error ? e.message : t('errorGeneric'));
+      const message = formatAppleAuthError(e);
+      if (!message) return;
+      Alert.alert(t('appName'), message);
     } finally {
       setLoading(false);
     }
@@ -68,7 +72,11 @@ export default function SignUpScreen() {
         placeholder="At least 6 characters"
       />
       <PrimaryButton label={t('signUp')} loading={loading} onPress={onSubmit} disabled={!configured} />
-      <AppleSignInButton onPress={onApple} disabled={loading || !configured} />
+      <AppleSignInButton
+        onPress={onApple}
+        disabled={loading || !configured}
+        buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+      />
       <Link href="/(auth)/sign-in" asChild>
         <GhostButton label={t('signIn')} />
       </Link>
