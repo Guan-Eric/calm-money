@@ -22,13 +22,13 @@ need PLAID_SECRET
 need PLAID_ENV
 need TOKEN_ENCRYPTION_KEY
 
-echo "Setting secrets on $PROJECT…"
-printf '%s' "$PLAID_CLIENT_ID" | npx -y firebase-tools@latest functions:secrets:set PLAID_CLIENT_ID --project "$PROJECT" --data-file -
-printf '%s' "$PLAID_SECRET" | npx -y firebase-tools@latest functions:secrets:set PLAID_SECRET --project "$PROJECT" --data-file -
-printf '%s' "$PLAID_ENV" | npx -y firebase-tools@latest functions:secrets:set PLAID_ENV --project "$PROJECT" --data-file -
-printf '%s' "$TOKEN_ENCRYPTION_KEY" | npx -y firebase-tools@latest functions:secrets:set TOKEN_ENCRYPTION_KEY --project "$PROJECT" --data-file -
+echo "Setting secrets on ${PROJECT}..."
+printf '%s' "${PLAID_CLIENT_ID}" | npx -y firebase-tools@latest functions:secrets:set PLAID_CLIENT_ID --project "${PROJECT}" --data-file -
+printf '%s' "${PLAID_SECRET}" | npx -y firebase-tools@latest functions:secrets:set PLAID_SECRET --project "${PROJECT}" --data-file -
+printf '%s' "${PLAID_ENV}" | npx -y firebase-tools@latest functions:secrets:set PLAID_ENV --project "${PROJECT}" --data-file -
+printf '%s' "${TOKEN_ENCRYPTION_KEY}" | npx -y firebase-tools@latest functions:secrets:set TOKEN_ENCRYPTION_KEY --project "${PROJECT}" --data-file -
 
-echo "Done. Deploy with: npx firebase-tools@latest deploy --only functions --project $PROJECT"
+echo "Done. Deploy with: npx firebase-tools@latest deploy --only functions --project ${PROJECT}"
 if [[ -n "${REVENUECAT_SECRET_API_KEY:-}" ]]; then
-  echo "Also set: npx firebase-tools@latest functions:params:set REVENUECAT_SECRET_API_KEY=\"$REVENUECAT_SECRET_API_KEY\" --project $PROJECT"
+  echo "Also set: npx firebase-tools@latest functions:params:set REVENUECAT_SECRET_API_KEY=\"${REVENUECAT_SECRET_API_KEY}\" --project ${PROJECT}"
 fi
